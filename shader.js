@@ -1,5 +1,6 @@
 const shaderSource = `
-#define MaxSteps 30
+// From https://www.shadertoy.com/view/Mdf3z7
+#define MaxSteps 20
 #define MinimumDistance 0.0009
 #define normalDistance 0.0002
 
@@ -9,15 +10,15 @@ const shaderSource = `
 #define FieldOfView 1.0
 #define Jitter 0.005
 #define FudgeFactor 0.7
-#define NonLinearPerspective 2.0
+#define NonLinearPerspective 3.0
 #define DebugNonlinearPerspective false
 
-#define Ambient 0.32184
-#define Diffuse 0.5
+#define Ambient .732184
+#define Diffuse 1.05
 #define LightDir vec3(1.0)
-#define LightColor vec3(1.0,1.0,0.858824)
+#define LightColor vec3(1.0,.10,0.0858824)
 #define LightDir2 vec3(1.0,-1.0,1.0)
-#define LightColor2 vec3(0.0,0.333333,1.0)
+#define LightColor2 vec3(.5,0.333333,.0)
 #define Offset vec3(0.92858,0.92858,0.32858)
 
 vec2 rotate(vec2 v, float a) {
@@ -57,6 +58,9 @@ float DE(in vec3 z)
 
 	float d = 1000.0;
 	for (int n = 0; n < Iterations; n++) {
+		if (n - 1 > int(mouseX * 7.) + 1) {
+			continue;
+		}
 		z.xy = rotate(z.xy,4.0+2.0*cos( time/8.0));		
 		z = abs(z);
 		if (z.x<z.y){ z.xy = z.yx;}
@@ -84,7 +88,8 @@ vec3 getNormal(in vec3 pos) {
 
 // Solid color 
 vec3 getColor(vec3 normal, vec3 pos) {
-	return vec3(1.0);
+	return vec3(mouseY, -mouseY, .5) * -1.;
+	// return vec3(1.);
 }
 
 
@@ -115,7 +120,7 @@ vec4 rayMarch(in vec3 from, in vec3 dir, in vec2 fragCoord) {
 	// 'AO' is based on number of steps.
 	// Try to smooth the count, to combat banding.
 	float smoothStep =   float(steps) + distance/MinimumDistance;
-	float ao = 1.1-smoothStep/float(MaxSteps);
+	float ao = 1.1-smoothStep*clicked/float(MaxSteps);
 	
 	// Since our distance field is not signed,
 	// backstep when calc'ing normal
@@ -130,7 +135,8 @@ vec4 rayMarch(in vec3 from, in vec3 dir, in vec2 fragCoord) {
 void main()
 {
 	// Camera position (eye), and camera target
-	vec3 camPos = 0.5*time*vec3(1.0,0.0,0.0);
+	float offset = distance(vec2(.5, .5), vec2(mouseX, mouseY)) > .05 ? .25 : .5;
+	vec3 camPos = 0.5*time*vec3(1.0,0.0,0.0)*offset;
 	vec3 target = camPos + vec3(1.0,0.0*cos(time)+(.5-mouseY)*4.,0.0*sin(0.4*time)+(.5-mouseX)*4.) ;
 	vec3 camUp  = vec3(0.0,1.0,0.0);
 	
@@ -145,6 +151,7 @@ void main()
 	// Get direction for this pixel
 	vec3 rayDir = normalize(camDir + (coord.x*camRight + coord.y*camUp)*FieldOfView);
 	
+
 	gl_FragColor = rayMarch(camPos, rayDir, gl_FragCoord.xy );
 }
 `;
