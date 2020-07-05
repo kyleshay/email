@@ -4,28 +4,77 @@
   <head>
     <title>visuals</title>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
     <style>
       body {
-        background-color: #000000;
         margin: 0px;
+        font-family: Helvetica, serif;
+        color: white;
+        background-color: #000000;
+      }
+      body > * {
+        position: absolute;
+      }
+      .container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+      }
+      .content {
+        align-items: center;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        flex-direction: column;
+        padding: 10px;
+
+      }
+      button {
+        display: none;
+        background-color: #000000;
+        border: none;
+        color: white;
+        position: fixed;
+        top: 50%;
+        left: 50%;
       }
     </style>
   </head>
   <body>
-<!--     <script type="text/javascript" src="./stats.js"></script> -->
+    <canvas id="canvas"></canvas>
+    <div class="container">
+      <div class="content">
+        <!-- <h1>Hey</h1> -->
+        <!-- <h1>Not much going on here.</h1> -->
+      </div>
+    </div>
+    <!-- <script type="text/javascript" src="./stats.js"></script> -->
     <script type="text/javascript" src="./shader.js"></script>
     <script>
       // thank you to iq and Mr. doob
-//       const stats = new Stats();
-//       document.body.appendChild(stats.dom);
+      if (window.Stats) {
+        const stats = new Stats();
+        document.body.appendChild(stats.dom);
+      }
 
-      var quality = 2.5; //.5 is very high quality -> 2.0 is low.
+      // const clickme = document.getElementById('clickme');
+      document.body.onclick = () => {
+        if (uniforms.clicked >= 4) {
+          uniforms.clicked = 0; 
+        }
+        uniforms.clicked++;
+      };
+
+      var quality = 1.8; //.5 is very high quality -> 2.0 is low.
       var code,
         canvas,
         gl,
         buffer,
         currentProgram,
+        uniforms = { // this should actually come from the shader file.
+          clicked: 1,
+        },
         parameters = {
           startTime: Date.now(),
           time: 0,
@@ -33,16 +82,14 @@
           mouseY: 0.5,
           screenWidth: 0,
           screenHeight: 0,
-        },
-        frontTarget,
-        backTarget,
-        compileOnChangeCode = true;
+        };
+
+      const uniformKeys = Object.keys(uniforms);
 
       init();
 
       function init() {
-        canvas = document.createElement("canvas");
-        document.body.appendChild(canvas);
+        canvas = document.getElementById("canvas");
 
         // Initialise WebGL
         try {
@@ -133,6 +180,7 @@
         uniform float mouseY;
         uniform float time;
         uniform vec2 resolution;
+        ${uniformKeys.map(uniform => (`uniform float ${uniform};`)).join()}
         ${shaderSource}`;
         var vertex = `attribute vec2 position; void main() { gl_Position = vec4( position, 0.0, 1.0 ); }`;
 
@@ -165,6 +213,7 @@
         cacheUniformLocation(program, "resolution");
         cacheUniformLocation(program, "mouseX");
         cacheUniformLocation(program, "mouseY");
+        uniformKeys.forEach(label => cacheUniformLocation(program, label));
 
         // Load program into GPU
         gl.useProgram(currentProgram);
@@ -216,8 +265,9 @@
       function animate() {
         requestAnimationFrame(animate);
         render();
-//         stats.update();
-        
+        if (window.Stats) {
+          stats.update();
+        }
       }
 
       function render() {
@@ -225,9 +275,11 @@
 
         gl.viewport(0, 0, canvas.width, canvas.height);
 
-        parameters.time = Date.now() - parameters.startTime;
+        parameters.time = Date.now() - parameters.startTime;  
 
-        // Set uniforms for custom shader
+
+        // Set uniforms for custom shaders
+        uniformKeys.forEach(label => gl.uniform1f(currentProgram.uniformsCache[label], uniforms[label]));
         gl.uniform1f(currentProgram.uniformsCache["time"], parameters.time / 1000);
         gl.uniform1f(currentProgram.uniformsCache["mouseX"], parameters.mouseX);
         gl.uniform1f(currentProgram.uniformsCache["mouseY"], parameters.mouseY);
