@@ -1,5 +1,5 @@
 const shaderSource = `
-// From https://www.shadertoy.com/view/Mdf3z7
+// remix https://www.shadertoy.com/view/Mdf3z7
 #define MaxSteps 20
 #define MinimumDistance 0.0009
 #define normalDistance 0.0002
