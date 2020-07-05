@@ -1,1 +1,251 @@
+<!DOCTYPE html>
 
+<html lang="en">
+  <head>
+    <title>visuals</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <style>
+      body {
+        background-color: #000000;
+        margin: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="text/javascript" src="./stats.js"></script>
+    <script type="text/javascript" src="./shader.js"></script>
+    <script>
+      // thank you to iq and Mr. doob
+//       const stats = new Stats();
+//       document.body.appendChild(stats.dom);
+
+      var quality = 2.5; //.5 is very high quality -> 2.0 is low.
+      var code,
+        canvas,
+        gl,
+        buffer,
+        currentProgram,
+        parameters = {
+          startTime: Date.now(),
+          time: 0,
+          mouseX: 0.5,
+          mouseY: 0.5,
+          screenWidth: 0,
+          screenHeight: 0,
+        },
+        frontTarget,
+        backTarget,
+        compileOnChangeCode = true;
+
+      init();
+
+      function init() {
+        canvas = document.createElement("canvas");
+        document.body.appendChild(canvas);
+
+        // Initialise WebGL
+        try {
+          gl = canvas.getContext("webgl", { preserveDrawingBuffer: true });
+        } catch (error) {}
+
+        if (!gl) {
+          alert("WebGL not supported, but code will be shown.");
+          return;
+        }
+
+        // Create vertex buffer (2 triangles)
+        buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array([
+            -1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            1.0,
+            -1.0,
+            1.0,
+            1.0,
+            -1.0,
+            1.0,
+          ]),
+          gl.STATIC_DRAW,
+        );
+
+        var clientXLast, clientYLast;
+
+        document.addEventListener(
+          "mousemove",
+          function (event) {
+            var clientX = event.clientX;
+            var clientY = event.clientY;
+
+            if (clientXLast == clientX && clientYLast == clientY) return;
+
+            clientXLast = clientX;
+            clientYLast = clientY;
+
+            var codeElement, dx, dy;
+
+            parameters.mouseX = clientX / window.innerWidth;
+            parameters.mouseY = 1 - clientY / window.innerHeight;
+          },
+          false,
+        );
+
+        function keyHandler(event) {
+          switch (event.key) {
+            case 'f': // fullscreen toggle
+              if (document.body.requestFullScreen) {
+                document.body.requestFullScreen();
+              } else if (document.body.mozRequestFullScreen) {
+                document.body.mozRequestFullScreen();
+              } else if (document.body.webkitRequestFullScreen) {
+                document.body.webkitRequestFullScreen(
+                  Element.ALLOW_KEYBOARD_INPUT,
+                );
+              }
+              break;
+            case 'c': // compile
+              compile();
+              break;
+          }
+        }
+
+        document.addEventListener("keypress", keyHandler, false);
+        onWindowResize();
+        window.addEventListener("resize", onWindowResize, false);
+        compile();
+        animate();
+      }
+
+      function compile() {
+        var program = gl.createProgram();
+        var fragment = `#ifdef GL_ES
+          precision highp float;
+        #endif
+
+        uniform float mouseX;
+        uniform float mouseY;
+        uniform float time;
+        uniform vec2 resolution;
+        ${shaderSource}`;
+        var vertex = `attribute vec2 position; void main() { gl_Position = vec4( position, 0.0, 1.0 ); }`;
+
+        var vs = createShader(vertex, gl.VERTEX_SHADER);
+        var fs = createShader(fragment, gl.FRAGMENT_SHADER);
+
+        if (vs == null || fs == null) return null;
+
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          console.error(gl.getProgramInfoLog(program));
+          return;
+        }
+
+        if (currentProgram) {
+          gl.deleteProgram(currentProgram);
+        }
+
+        currentProgram = program;
+
+        // Cache uniforms
+        cacheUniformLocation(program, "time");
+        cacheUniformLocation(program, "resolution");
+        cacheUniformLocation(program, "mouseX");
+        cacheUniformLocation(program, "mouseY");
+
+        // Load program into GPU
+        gl.useProgram(currentProgram);
+      }
+
+      function cacheUniformLocation(program, label) {
+        if (program.uniformsCache === undefined) {
+          program.uniformsCache = {};
+        }
+        program.uniformsCache[label] = gl.getUniformLocation(program, label);
+      }
+
+      function htmlEncode(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      //
+
+      function createShader(src, type) {
+        var shader = gl.createShader(type);
+
+        gl.shaderSource(shader, src);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          console.error(gl.getShaderInfoLog(shader));
+
+          return null;
+        }
+        return shader;
+      }
+
+      function onWindowResize(event) {
+        canvas.width = window.innerWidth / quality;
+        canvas.height = window.innerHeight / quality;
+
+        canvas.style.width = window.innerWidth + "px";
+        canvas.style.height = window.innerHeight + "px";
+
+        parameters.screenWidth = canvas.width;
+        parameters.screenHeight = canvas.height;
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        render();
+//         stats.update();
+        
+      }
+
+      function render() {
+        if (!currentProgram) return;
+
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        parameters.time = Date.now() - parameters.startTime;
+
+        // Set uniforms for custom shader
+        gl.uniform1f(currentProgram.uniformsCache["time"], parameters.time / 1000);
+        gl.uniform1f(currentProgram.uniformsCache["mouseX"], parameters.mouseX);
+        gl.uniform1f(currentProgram.uniformsCache["mouseY"], parameters.mouseY);
+        gl.uniform2f(
+          currentProgram.uniformsCache["resolution"],
+          parameters.screenWidth,
+          parameters.screenHeight,
+        );
+
+        var vertexPosition = gl.getAttribLocation(currentProgram, "position");
+        gl.enableVertexAttribArray(vertexPosition);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.vertexAttribPointer(vertexPosition, 2, gl.FLOAT, false, 0, 0);
+
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+    </script>
+  </body>
+</html>
